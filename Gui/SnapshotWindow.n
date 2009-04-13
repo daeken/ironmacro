@@ -1,0 +1,43 @@
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using SdlDotNet.Core;
+using SdlDotNet.Graphics;
+
+using Nextem.String;
+
+namespace IronMacro.Gui {
+	public class SnapshotWindow {
+		mutable Screen : Surface;
+		mutable Image : Surface;
+		
+		public this() {
+			Events.Tick += 
+				fun(_, _) {
+					lock(this) {
+						unless(Image == null) {
+							_ = Screen.Blit(Image);
+							Screen.Update()
+						}
+					}
+				}
+			Events.Quit +=
+				fun(_, _) {
+					Events.QuitApplication()
+				}
+			Events.Fps = 60;
+			
+			Screen = Video.SetVideoMode(800, 600, 24)
+		}
+		
+		public Update(bitmap : Bitmap) : void {
+			Image = Surface(bitmap);
+			
+			Screen = Video.SetVideoMode(Image.Width, Image.Height, 24)
+		}
+		
+		public Start() : void {
+			Events.Run()
+		}
+	}
+}

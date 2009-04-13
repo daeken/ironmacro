@@ -24,18 +24,22 @@
 			</references>
 			<arg line="-r Nemerle.Compiler.dll -r ../Nextem/Obj/Nextem.dll -m ../Nextem/Obj/Nextem.Macros.dll -r System.Drawing.dll" />
 		</ncc>
-		<ncc target="exe" output="Obj/Test.exe" debug="${debug}">
-			<sources>
-				<include name="*.n" />
-			</sources>
-			<references>
-				<include name="Obj/IronMacro.Core.dll" />
-			</references>
-			<arg line="-r Nemerle.Compiler.dll -r ../Nextem/Obj/Nextem.dll -m ../Nextem/Obj/Nextem.Macros.dll -r System.Drawing.dll" />
-		</ncc>
 	</target>
 	
 	<target name="Gui" description="Build the GUI" depends="Core">
+		<ncc target="exe" output="Obj/IronMacro.exe" debug="${debug}">
+			<sources>
+				<include name="Gui/*.n" />
+			</sources>
+			<references>
+				<include name="Obj/IronMacro.Core.dll" />
+				<include name="C:\Program Files (x86)\SdlDotNet\bin\SdlDotNet.dll" />
+			</references>
+			<arg line="-r Nemerle.Compiler.dll -r ../Nextem/Obj/Nextem.dll -m ../Nextem/Obj/Nextem.Macros.dll -r System.Drawing.dll" />
+		</ncc>
+		<exec program="corflags" failonerror="false">
+			<arg line="/32bit+ Obj/IronMacro.exe" />
+		</exec>
 	</target>
 	
 	<target name="Examples" description="Build the examples" depends="Core">
