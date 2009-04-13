@@ -54,7 +54,7 @@ namespace IronMacro.Core {
 			Hwnd = handle
 		}
 		
-		public Grab() : Image {
+		public Grab() : Bitmap {
 			def srcDC = User.GetWindowDC(Hwnd);
 			
 			mutable rect = User.RECT();
@@ -72,7 +72,8 @@ namespace IronMacro.Core {
 			
 			def img = Image.FromHbitmap(bitmap);
 			_ = Gdi.DeleteObject(bitmap);
-			img
+			def rectf = RectangleF(0f, 0f, width :> float, height :> float);
+			img.Clone(rectf, PixelFormat.Format24bppRgb)
 		}
 		
 		public static FindWindows(processName : string) : list [Window] {

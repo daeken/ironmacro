@@ -1,0 +1,44 @@
+using System;
+using System.Threading;
+
+using Nextem.String;
+
+using IronMacro.Core;
+
+namespace IronMacro.Gui {
+	public class Gui {
+		Windows : list [Window];
+		Snapshot : SnapshotWindow;
+		
+		this(process : string) {
+			Windows = Window.FindWindows(process);
+			Windows = Windows.Filter(
+					win => match(win.Title) {
+						| "" | "Default IME" | "MSCTFIME UI" => false
+						| _ => true
+					}
+				);
+			
+			Snapshot = SnapshotWindow();
+			Thread(MainStart).Start();
+			Snapshot.Start()
+		}
+		
+		MainStart() : void {
+			Snapshot.Update(SelectWindow().Grab())
+		}
+		
+		SelectWindow() : Window {
+			mutable i = 0;
+			Windows.Iter(win => { print "{0}: {1}" <- (i, win.Title); ++i });
+			
+			Console.Write("Select a window: ");
+			def selected = int.Parse(Console.ReadLine().Trim());
+			Windows.Nth(selected)
+		}
+		
+		public static Main(args : array [string]) : void {
+			_ = Gui(args[0])
+		}
+	}
+}
