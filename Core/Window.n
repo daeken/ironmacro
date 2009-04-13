@@ -1,0 +1,95 @@
+using System;
+using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+using System.Text;
+
+using Nextem.String;
+using Nextem.Wrap;
+
+namespace IronMacro.Core {
+	public module User wraps "user32.dll" {
+		[Record]
+		[StructLayout(LayoutKind.Sequential)]
+		public struct RECT {
+			public mutable Left : int;
+			public mutable Top : int;
+			public mutable Right : int;
+			public mutable Bottom : int
+		}
+		
+		public delegate EnumThreadProc(hwnd : IntPtr, param : IntPtr) : bool;
+		
+		public extern EnumThreadWindows(threadId : int, callback : EnumThreadProc, param : IntPtr) : bool;
+		
+		public extern GetWindowDC(hwnd : IntPtr) : IntPtr;
+		public extern GetWindowRect(hwnd : IntPtr, rect : ref RECT) : IntPtr;
+		public extern ReleaseDC(hwnd : IntPtr, hdc : IntPtr) : IntPtr;
+		
+		public extern GetWindowText(hwnd : IntPtr, string : StringBuilder, count : int) : int;
+	}
+	
+	public module Gdi wraps "gdi32.dll" {
+		public extern BitBlt(obj : IntPtr, xDest : int, yDest : int, width : int, height : int, src : IntPtr, xSrc : int, ySrc : int, dwRop : int) : bool;
+		public extern CreateCompatibleBitmap(hdc : IntPtr, width : int, height : int) : IntPtr;
+		public extern CreateCompatibleDC(hdc : IntPtr) : IntPtr;
+		public extern DeleteDC(hdc : IntPtr) : bool;
+		public extern DeleteObject(obj : IntPtr) : bool;
+		public extern SelectObject(hdc : IntPtr, obj : IntPtr) : IntPtr
+	}
+	
+	public class Window {
+		public Hwnd : IntPtr;
+		
+		public Title : string {
+			get {
+				def string = StringBuilder(256);
+				_ = User.GetWindowText(Hwnd, string, 256);
+				string.ToString().Trim()
+			}
+		}
+		
+		public this(handle : IntPtr) {
+			Hwnd = handle
+		}
+		
+		public Grab() : Image {
+			def srcDC = User.GetWindowDC(Hwnd);
+			
+			mutable rect = User.RECT();
+			_ = User.GetWindowRect(Hwnd, ref rect);
+			def width = rect.Right - rect.Left;
+			def height = rect.Bottom - rect.Top;
+			
+			def destDC = Gdi.CreateCompatibleDC(srcDC);
+			def bitmap = Gdi.CreateCompatibleBitmap(srcDC, width, height);
+			def old = Gdi.SelectObject(destDC, bitmap);
+			_ = Gdi.BitBlt(destDC, 0, 0, width, height, srcDC, 0, 0, 0x00CC0020);
+			_ = Gdi.SelectObject(destDC, old);
+			_ = Gdi.DeleteDC(destDC);
+			_ = User.ReleaseDC(Hwnd, srcDC);
+			
+			def img = Image.FromHbitmap(bitmap);
+			_ = Gdi.DeleteObject(bitmap);
+			img
+		}
+		
+		public static FindWindows(processName : string) : list [Window] {
+			mutable windows = [];
+			
+			def callback(hwnd : IntPtr, _ : IntPtr) : bool {
+				windows ::= Window(hwnd);
+				
+				true
+			}
+			
+			def processes = Process.GetProcessesByName(processName);
+			foreach(process in processes)
+				foreach(thread is ProcessThread in process.Threads)
+					_ = User.EnumThreadWindows(thread.Id, callback, IntPtr.Zero);
+			
+			windows
+		}
+	}
+}

@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<project name="IronMacro" default="Build" basedir=".">
+	<description>Macro engine</description>
+	<property name="debug" value="true" overwrite="false" />
+	<target name="clean" description="Clean build directory">
+		<delete failonerror="false">
+			<fileset>
+				<include name="Obj\*.dll" />
+				<include name="Obj\*.so" />
+				<include name="Obj\*.exe" />
+				<include name="Obj\*.obj" />
+				<include name="Obj\*.*db" />
+			</fileset>
+		</delete>
+	</target>
+	
+	<target name="Core" description="Build the core" depends="">
+		<mkdir dir="Obj/" />
+		<ncc target="library" output="Obj/IronMacro.Core.dll" debug="${debug}">
+			<sources>
+				<include name="Core/*.n" />
+			</sources>
+			<references>
+			</references>
+			<arg line="-r Nemerle.Compiler.dll -r ../Nextem/Obj/Nextem.dll -m ../Nextem/Obj/Nextem.Macros.dll -r System.Drawing.dll" />
+		</ncc>
+		<ncc target="exe" output="Obj/Test.exe" debug="${debug}">
+			<sources>
+				<include name="*.n" />
+			</sources>
+			<references>
+				<include name="Obj/IronMacro.Core.dll" />
+			</references>
+			<arg line="-r Nemerle.Compiler.dll -r ../Nextem/Obj/Nextem.dll -m ../Nextem/Obj/Nextem.Macros.dll -r System.Drawing.dll" />
+		</ncc>
+	</target>
+	
+	<target name="Gui" description="Build the GUI" depends="Core">
+	</target>
+	
+	<target name="Examples" description="Build the examples" depends="Core">
+	</target>
+	
+	<target name="Build" description="Build IronMacro" depends="Core, Gui, Examples" />
+</project>
