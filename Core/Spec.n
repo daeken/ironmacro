@@ -20,15 +20,17 @@ namespace IronMacro.Core {
 	public variant Spec {
 		| Class {
 				_Name : string;
+				mutable _Size : int * int;
 				Members : Hashtable [string, MapRect * Spec]
 			}
 		| Trigger {
 				_Name : string;
 				On : TriggerOn;
-				Image : string;
+				mutable Image : string;
 			}
 		| EnumMapping {
 				_Name : string;
+				mutable _Size : int * int;
 				Members : Hashtable [string, int * string]
 			}
 		| StringMapping {
@@ -52,9 +54,9 @@ namespace IronMacro.Core {
 		public Name : string {
 			get {
 				match(this) {
-					| Class(name, _)
+					| Class(name, _, _)
 					| Trigger(name, _, _)
-					| EnumMapping(name, _)
+					| EnumMapping(name, _, _)
 					| StringMapping(name, _)
 					| IntMapping(name, _)
 					| BoolMapping(name, _, _)
@@ -64,11 +66,32 @@ namespace IronMacro.Core {
 			}
 		}
 		
+		public Size : int * int {
+			get {
+				match(this) {
+					| Class(_, size, _)
+					| EnumMapping(_, size, _) => size
+					| _ => (-1, -1)
+				}
+			}
+			set {
+				match(this) {
+					| Class as x => x._Size = value
+					| EnumMapping as x => x._Size = value
+					| _ => ()
+				}
+			}
+		}
+		
 		public override ToString() : string {
 			mutable ret : string;
 			match(this) {
-				| EnumMapping(name, members) =>
-					ret = "\t<Enum name=\"{0}\">\n" <- name;
+				| EnumMapping(name, size, members) =>
+					ret = "\t<Enum name=\"{0}\"{1}>\n" <- (
+							name, 
+							if(size[0] == -1 && size[1] == -1) ""
+							else " size=\"{0},{1}\"" <- (size[0], size[1])
+						);
 					foreach(pair in members) {
 						def (value, image) = pair.Value;
 						ret += "\t\t<Elem name=\"{0}\" value=\"{1}\" {2}/>\n" <- (
@@ -78,13 +101,17 @@ namespace IronMacro.Core {
 								else "image=\"{0}\" " <- image
 							)
 					}
-					ret + "\t</Enum>"
-				| Class(name, members) =>
-					ret = "\t<Class name=\"{0}\">\n" <- name;
+					ret + "\t</Enum>\n"
+				| Class(name, size, members) =>
+					ret = "\t<Class name=\"{0}\"{1}>\n" <- (
+							name, 
+							if(size[0] == -1 && size[1] == -1) ""
+							else " size=\"{0},{1}\"" <- (size[0], size[1])
+						);
 					foreach((rect, spec) in members.Values) {
 						def rect = 
 							if(rect[0] == -1 && rect[1] == -1 && rect[2] == -1 && rect[3] == -1) ""
-							else "rect=\"{0},{1},{2},{3}\" " <- rect;
+							else "rect=\"{0},{1},{2},{3}\" " <- (rect[0], rect[1], rect[2], rect[3]);
 						match(spec) {
 							| Trigger(name, on, image) =>
 								ret += "\t\t<Trigger name=\"{0}\" on=\"{1}\" {2}{3}/>\n" <- (
@@ -101,15 +128,15 @@ namespace IronMacro.Core {
 									)
 							| Ref(name, spec) =>
 								ret += "\t\t<Prop name=\"{0}\" type=\"{1}\" {2}/>\n" <- (name, spec.Name, rect)
-							| StringMapping(_, mapping)
-							| IntMapping(_, mapping)
-							| BoolMapping(_, t, f)
+							| StringMapping(name, mapping)
+							| IntMapping(name, mapping)
+							| BoolMapping(name, t, f)
 								with mapping = Hashtable([("true", t), ("false", f)]) => 
 								mutable subret = "";
 								foreach(pair in mapping)
 									subret += 
 										if(pair.Value == null) ""
-										else "\t\t\t<Value value=\"{0}\" name=\"{1}\" />\n" <- (pair.Key, pair.Value);
+										else "\t\t\t<Value value=\"{0}\" image=\"{1}\" />\n" <- (pair.Key, pair.Value);
 								
 								ret += "\t\t<Prop name=\"{0}\" type=\"{1}\" {2}>\n{3}\t\t</Prop>\n" <- (
 										name, 
@@ -141,13 +168,23 @@ namespace IronMacro.Core {
 			def enumNodes = xmlDoc.GetElementsByTagName("Enum");
 			foreach(node is XmlNode in enumNodes) {
 				def attrs = node.Attributes;
-				unless(attrs.Count == 1 && attrs[0].Name == "name") throw Exception("Enum takes one attribute, 'name'.");
+				def enumName = 
+					match(attrs.GetNamedItem("name")) {
+						| null => throw Exception("Enum requires a name attribute.")
+						| x => x.InnerText
+					}
+				def size =
+					match(attrs.GetNamedItem("size")) {
+						| null => (-1, -1)
+						| x =>
+							def (w, h) = x.InnerText.Split1(",");
+							(int.Parse(w), int.Parse(h))
+					}
 				
-				def enumName = attrs[0].Value;
 				order ::= enumName;
 				mutable i = 0;
 				def members = Hashtable();
-				hash[enumName] = Spec.EnumMapping(enumName, members);
+				hash[enumName] = Spec.EnumMapping(enumName, size, members);
 				
 				foreach(child is XmlNode in node) {
 					unless(child.Name == "Elem") throw Exception("Enum can only contain Elem elements.");
@@ -176,12 +213,22 @@ namespace IronMacro.Core {
 			def classNodes = xmlDoc.GetElementsByTagName("Class");
 			foreach(node is XmlNode in classNodes) {
 				def attrs = node.Attributes;
-				unless(attrs.Count == 1 && attrs[0].Name == "name") throw Exception("Class takes one attribute, 'name'.");
+				def className = 
+					match(attrs.GetNamedItem("name")) {
+						| null => throw Exception("Class requires a name attribute.")
+						| x => x.InnerText
+					}
+				def size =
+					match(attrs.GetNamedItem("size")) {
+						| null => (-1, -1)
+						| x =>
+							def (w, h) = x.InnerText.Split1(",");
+							(int.Parse(w), int.Parse(h))
+					}
 				
-				def className = attrs[0].Value;
 				order ::= className;
 				def members = Hashtable();
-				hash[className] = Spec.Class(className, members);
+				hash[className] = Spec.Class(className, size, members);
 				
 				foreach(child is XmlNode in node) {
 					def attrs = child.Attributes;
@@ -208,7 +255,7 @@ namespace IronMacro.Core {
 								match(typ) {
 									| "string" => Spec.StringMapping(name, values)
 									| "int" => 
-										Spec.StringMapping(name, values)
+										Spec.IntMapping(name, values)
 									| "bool" => 
 										Spec.BoolMapping(
 												name,

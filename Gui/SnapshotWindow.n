@@ -1,25 +1,78 @@
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Threading;
 using SdlDotNet.Core;
+using SdlDotNet.Input;
 using SdlDotNet.Graphics;
+using SdlDotNet.Graphics.Primitives;
 
 using Nextem.String;
+
+using IronMacro.Core;
 
 namespace IronMacro.Gui {
 	public class SnapshotWindow {
 		mutable Screen : Surface;
 		mutable Image : Surface;
 		
+		mutable Selecting : bool = false;
+		mutable Dragging : bool = false;
+		mutable DSize : int * int;
+		mutable Selection : MapRect = (-1, -1, -1, -1);
+		
 		public this() {
 			Events.Tick += 
 				fun(_, _) {
-					lock(this) {
-						unless(Image == null) {
+					lock(this)
+						unless(Image == null)
 							_ = Screen.Blit(Image);
-							Screen.Update()
-						}
+					
+					when(Selection[0] != -1)
+						_ = Screen.Draw(
+							if(Selecting)
+								Box(
+									Selection[0] :> short, 
+									Selection[1] :> short, 
+									Selection[2] :> short, 
+									Selection[3] :> short
+								)
+							else
+								Box(
+									Selection[0] :> short, 
+									Selection[1] :> short, 
+									(Selection[0] + DSize[0]) :> short, 
+									(Selection[1] + DSize[1]) :> short, 
+								), 
+							Color.FromArgb(255, 255, 0, 0), 
+							false, 
+							false
+						);
+					
+					Screen.Update()
+				}
+			Events.MouseButtonDown += 
+				fun(_, e : MouseButtonEventArgs) {
+					when(Selecting || Dragging)
+						Selection = (e.X :> int, e.Y :> int, e.X :> int, e.Y :> int)
+				}
+			Events.MouseButtonUp += 
+				fun(_, e : MouseButtonEventArgs) {
+					when(Selecting) {
+						Selecting = false;
+						Selection = (Selection[0], Selection[1], e.X :> int, e.Y :> int)
 					}
+					when(Dragging) {
+						Dragging = false;
+						Selection = (e.X :> int, e.Y :> int, 0, 0)
+					}
+				}
+			Events.MouseMotion += 
+				fun(_, e : MouseMotionEventArgs) {
+					when(Selecting)
+						Selection = (Selection[0], Selection[1], e.X :> int, e.Y :> int);
+					when(Dragging && Selection[0] != -1)
+						Selection = (e.X :> int, e.Y :> int, 0, 0)
 				}
 			Events.Quit +=
 				fun(_, _) {
@@ -27,13 +80,32 @@ namespace IronMacro.Gui {
 				}
 			Events.Fps = 60;
 			
-			Screen = Video.SetVideoMode(800, 600, 24)
+			Screen = Video.SetVideoMode(800, 600, 32)
 		}
 		
 		public Update(bitmap : Bitmap) : void {
 			Image = Surface(bitmap);
 			
-			Screen = Video.SetVideoMode(Image.Width, Image.Height, 24)
+			Screen = Video.SetVideoMode(Image.Width, Image.Height, 32)
+		}
+		
+		public Select() : MapRect {
+			Selecting = true;
+			Selection = (-1, -1, -1, -1);
+			while(Selecting) { Thread.Sleep(100) }
+			def temp = Selection;
+			Selection = (-1, -1, -1, -1);
+			temp
+		}
+		
+		public PlaceBox(size : int * int) : MapRect {
+			Dragging = true;
+			DSize = size;
+			Selection = (-1, -1, -1, -1);
+			while(Dragging) { Thread.Sleep(100) }
+			def temp = Selection;
+			Selection = (-1, -1, -1, -1);
+			(temp[0], temp[1], temp[0]+size[0], temp[1]+size[1])
 		}
 		
 		public Start() : void {
