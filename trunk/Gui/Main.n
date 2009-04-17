@@ -1,5 +1,10 @@
 using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
 using System.Threading;
+using Nemerle.Collections;
+using Nemerle.Imperative;
 
 using Nextem.String;
 
@@ -8,9 +13,16 @@ using IronMacro.Core;
 namespace IronMacro.Gui {
 	public class Gui {
 		Windows : list [Window];
+		mutable CurWindow : Window;
+		mutable CurImage : Bitmap;
 		Snapshot : SnapshotWindow;
+		SpecFn : string;
+		CurSpec : list [Spec];
 		
-		this(process : string) {
+		this(process : string, spec : string) {
+			SpecFn = spec;
+			CurSpec = Spec.Load(spec);
+			
 			Windows = Window.FindWindows(process);
 			Windows = Windows.Filter(
 					win => match(win.Title) {
@@ -25,20 +37,174 @@ namespace IronMacro.Gui {
 		}
 		
 		MainStart() : void {
-			Snapshot.Update(SelectWindow().Grab())
+			CurWindow = SelectWindow();
+			CurImage = CurWindow.Grab();
+			Snapshot.Update(CurImage);
+			
+			while(true) {
+				printn "Commands [(s)ave, (p)ickwin, (m)ap, sets(i)ze, (t)rain, (g)rab]: ";
+				def cmd = Console.ReadLine();
+				match(if(cmd == null) cmd else cmd.Trim()) {
+					| null => break
+					| "s" | "save" => 
+						printn "Filename (default: {0}): " <- SpecFn;
+						def fn = match(Console.ReadLine().Trim()) { | "" => SpecFn | x => x }
+						def fp = File.OpenWrite(fn);
+						def sw = StreamWriter(fp);
+						sw.WriteLine("<Screenspec>");
+						foreach(spec in CurSpec)
+							sw.Write(spec.ToString());
+						sw.WriteLine("</Screenspec>");
+						sw.Close();
+						fp.Close();
+						print "Saved to {0}" <- fn
+					| "p" | "pickwin" => 
+						CurWindow = SelectWindow();
+						CurImage = CurWindow.Grab();
+						Snapshot.Update(CurImage);
+					| "g" | "grab" => 
+						CurImage = CurWindow.Grab();
+						Snapshot.Update(CurImage);
+					| "m" | "map" =>
+						printn "Element to map: ";
+						def elem = Console.ReadLine().Trim();
+						def (parent, child) = elem.Split1(".");
+						DoMap(parent, child)
+					| "i" | "setsize" =>
+						printn "Class/enum to size: ";
+						DoSize(Console.ReadLine().Trim())
+					| "t" | "train" => 
+						printn "Member to train: ";
+						def elem = Console.ReadLine().Trim();
+						def (parent, child) = elem.Split1(".");
+						printn "Value: ";
+						def value = Console.ReadLine().Trim();
+						DoTrain(parent, child, value)
+					| _ => print "Unknown command"
+				}
+			}
+		}
+		
+		DoTrain(parent : string, childName : string, value : string) : void {
+			def file = "{0}.{1}.{2}.png" <- (parent, childName, value);
+			def parent = FindParent(parent);
+			def children = childName.SplitList(".");
+			def (members, child, off) = FindChild(parent, children, (0, 0));
+			def (rect, spec) = members[child];
+			
+			def cut = 
+				CurImage.Clone(
+					Rectangle(
+						off[0]+rect[0], 
+						off[1]+rect[1], 
+						rect[2]-rect[0], 
+						rect[3]-rect[1]
+					), 
+					PixelFormat.Format24bppRgb
+				);
+			cut.Save(file);
+			
+			match(spec) {
+				| EnumMapping(_, _, members) => 
+					members[value] = (members[value][0], file)
+				| IntMapping(_, mapping) | StringMapping(_, mapping) => 
+					mapping[value] = file
+				| BoolMapping as spec => 
+					match(value) {
+						| "true" => spec.True = file
+						| "false" => spec.False = file
+						| _ => print "Bool mappings can only have true and false values."
+					}
+				| Trigger as spec => 
+					spec.Image = file
+				| _ => ()
+			}
+		}
+		
+		DoMap(parent : string, child : string) : void {
+			def parent = FindParent(parent);
+			def children = child.SplitList(".");
+			def (members, child, off) = FindChild(parent, children, (0, 0));
+			
+			mutable rect : MapRect;
+			while(true) {
+				rect = 
+					match(members[child]) {
+						| (_, Ref(_, spec)) =>
+							Snapshot.PlaceBox(spec.Size)
+						| _ =>
+							Snapshot.Select()
+					}
+				printn "Is this selection correct [(y)es, (n)o]? (default: y): ";
+				match(Console.ReadLine().Trim()) {
+					| "" | "y" | "yes" => break
+					| _ => ()
+				}
+			}
+			
+			rect = (rect[0]-off[0], rect[1]-off[1], rect[2]-off[0], rect[3]-off[1]);
+			members[child] = (rect, members[child][1])
+		}
+		
+		FindChild(parent : Spec, children : list [string], off : int * int) 
+		: Hashtable [string, MapRect * Spec] * string * (int * int) {
+			match(parent) {
+				| Class(_, _, members) => 
+					match(children) {
+						| [] => (null, null, off)
+						| [end] => (members, end, off)
+						| head :: tail => 
+							def (child, off) = 
+								match(members[head]) {
+									| (rect, Ref(_, spec)) =>
+										(
+											spec, 
+											(off[0]+rect[0], off[1]+rect[1])
+										)
+									| _ => (null, off)
+								}
+							FindChild(child, tail, off)
+					}
+				| _ => (null, null, off)
+			}
+		}
+		
+		DoSize(name : string) : void {
+			def parent = FindParent(name);
+			
+			mutable rect : MapRect;
+			while(true) {
+				rect = Snapshot.Select();
+				printn "Is this size correct [(y)es, (n)o]? (default: y): ";
+				match(Console.ReadLine().Trim()) {
+					| "" | "y" | "yes" => break
+					| _ => ()
+				}
+			}
+			
+			def (left, top, right, bottom) = rect;
+			parent.Size = (right-left, bottom-top)
+		}
+		
+		FindParent(name : string) : Spec {
+			foreach(spec in CurSpec)
+				when(spec.Name == name)
+					return spec;
+			
+			null
 		}
 		
 		SelectWindow() : Window {
 			mutable i = 0;
 			Windows.Iter(win => { print "{0}: {1}" <- (i, win.Title); ++i });
 			
-			Console.Write("Select a window: ");
+			printn "Select a window: ";
 			def selected = int.Parse(Console.ReadLine().Trim());
 			Windows.Nth(selected)
 		}
 		
 		public static Main(args : array [string]) : void {
-			_ = Gui(args[0])
+			_ = Gui(args[0], args[1])
 		}
 	}
 }
