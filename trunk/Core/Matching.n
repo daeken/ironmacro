@@ -7,6 +7,8 @@ using Nemerle.Imperative;
 using Nextem.String;
 
 namespace IronMacro.Core {
+	public delegate TriggerDelegate() : void;
+	
 	public module Matching {
 		public MatchGreyscale(full : Bitmap, sub : Bitmap, off : int * int) : bool {
 			Match(
@@ -28,6 +30,10 @@ namespace IronMacro.Core {
 			)
 		}
 		
+		public MatchInvMask(win : Window, rect : MapRect, path : string) : bool {
+			MatchInvMask(win.LastGrab, ImageCache(path), (rect[0], rect[1]))
+		}
+		
 		public Match [T](full : Bitmap, sub : Bitmap, off : int * int, filter : Color -> T, comp : T * T -> bool) : bool {
 			for(mutable x = 0; x < sub.Width; ++x)
 				for(mutable y = 0; y < sub.Height; ++y)
@@ -36,15 +42,11 @@ namespace IronMacro.Core {
 			true
 		}
 		
-		public MatchAll [T](win : Window, rect : MapRect, path : string, map : Hashtable [string, T], default : T) : T {
-			def sub = win.LastGrab.Clone(
-					Rectangle(rect[0], rect[1], rect[2]-rect[0], rect[3]-rect[1]), 
-					PixelFormat.Format24bppRgb
-				);
+		public MatchAll [T](win : Window, rect : MapRect, path : string, map : Hashtable [string, T]) : T {
 			foreach(pair in map)
-				when(MatchInvMask(ImageCache(path + "\\" + pair.Key), sub, (0, 0)))
+				when(MatchInvMask(win.LastGrab, ImageCache(path + "\\" + pair.Key), (rect[0], rect[1])))
 					return pair.Value;
-			default
+			throw Exception("Match failed")
 		}
 		
 		static Images : Hashtable [string, Bitmap] = Hashtable();
