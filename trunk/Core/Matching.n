@@ -1,0 +1,57 @@
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using Nemerle.Collections;
+using Nemerle.Imperative;
+
+using Nextem.String;
+
+namespace IronMacro.Core {
+	public module Matching {
+		public MatchGreyscale(full : Bitmap, sub : Bitmap, off : int * int) : bool {
+			Match(
+				full, sub, off, 
+				fun(color) {
+					color.R + color.G + color.B
+				}, 
+				(left, right) => (left == right)
+			)
+		}
+		
+		public MatchInvMask(full : Bitmap, sub : Bitmap, off : int * int) : bool {
+			Match(
+				full, sub, off, 
+				fun(color) {
+					((color.R : byte) :> int) != 255 || ((color.B : byte) :> int) != 255 || ((color.G : byte) :> int) != 255
+				}, 
+				(left, right) => (left == right)
+			)
+		}
+		
+		public Match [T](full : Bitmap, sub : Bitmap, off : int * int, filter : Color -> T, comp : T * T -> bool) : bool {
+			for(mutable x = 0; x < sub.Width; ++x)
+				for(mutable y = 0; y < sub.Height; ++y)
+					unless(comp(filter(full.GetPixel(x + off[0], y + off[1])), filter(sub.GetPixel(x, y))))
+						return false;
+			true
+		}
+		
+		public MatchAll [T](win : Window, rect : MapRect, path : string, map : Hashtable [string, T], default : T) : T {
+			def sub = win.LastGrab.Clone(
+					Rectangle(rect[0], rect[1], rect[2]-rect[0], rect[3]-rect[1]), 
+					PixelFormat.Format24bppRgb
+				);
+			foreach(pair in map)
+				when(MatchInvMask(ImageCache(path + "\\" + pair.Key), sub, (0, 0)))
+					return pair.Value;
+			default
+		}
+		
+		static Images : Hashtable [string, Bitmap] = Hashtable();
+		static ImageCache(fn : string) : Bitmap {
+			unless(Images.ContainsKey(fn))
+				Images[fn] = Image.FromFile(fn) :> Bitmap;
+			Images[fn]
+		}
+	}
+}

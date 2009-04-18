@@ -1,0 +1,115 @@
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+using Nemerle.Collections;
+
+using Nextem.String;
+
+using IronMacro.Core;
+
+namespace IronMacro.Compiler {
+	public class Compiler {
+		this(spec : string, ns : string, outFn : string) {
+			def spec = Spec.Load(spec);
+			
+			def fp = File.Open(outFn, FileMode.Truncate);
+			def sw = StreamWriter(fp);
+			sw.WriteLine("using System.Drawing;");
+			sw.WriteLine("using System.Drawing.Imaging;");
+			sw.WriteLine("using Nemerle.Collections;");
+			sw.WriteLine("using IronMacro.Core;");
+			sw.WriteLine("namespace {0} {{" <- ns);
+			
+			foreach(child in spec) {
+				| EnumMapping(name, _size, members) =>
+					sw.WriteLine("\tpublic enum {0} {{" <- name);
+					foreach(pair in members)
+						sw.WriteLine("\t\t| {0} = {1}" <- (pair.Key, pair.Value[0]));
+					sw.WriteLine("\t}")
+				
+				| Class(name, _size, members) =>
+					sw.WriteLine("\tpublic class {0} {{" <- name);
+					sw.WriteLine("\t\tOff : int * int;");
+					sw.WriteLine("\t\tWin : Window;");
+					sw.WriteLine("\t\tPath : string;");
+					sw.WriteLine("\t\tpublic this(off : int * int, win : Window, path : string) {");
+					sw.WriteLine("\t\t\tOff = off;");
+					sw.WriteLine("\t\t\tWin = win;");
+					sw.WriteLine("\t\t\tPath = path;");
+					foreach(pair in members)
+						match(pair.Value[1]) {
+							| Ref(_, Class(cname, _, _)) => 
+								sw.WriteLine(
+									"\t\t\t{0} = {1}((Off[0]+{2}, Off[1]+{3}), Win, Path);" <- (
+											pair.Key, 
+											cname, 
+											pair.Value[0][0], 
+											pair.Value[0][1]
+										)
+								)
+							| _ => ()
+						}
+					sw.WriteLine("\t\t}");
+					foreach(pair in members)
+						match(pair.Value[1]) {
+							| Trigger => ()
+							| Ref(_, Class(cname, _, _)) =>
+								sw.WriteLine("\t\tpublic {0} : {1};" <- (pair.Key, cname))
+							| spec => 
+								sw.WriteLine(
+									"\t\tpublic {0} : {1} {{" <- (
+											pair.Key, 
+											match(spec) {
+												| StringMapping => "string"
+												| IntMapping => "int"
+												| BoolMapping => "bool"
+												| Ref(_, spec) => spec.Name
+												| _ => null
+											}
+										)
+								);
+								sw.WriteLine("\t\t\tget {");
+								sw.WriteLine(
+									"\t\t\t\tMatching.MatchAll(Win, ({0}+Off[0], {1}+Off[1], {2}+Off[0], {3}+Off[1]), Path, Hashtable([" <- (
+											pair.Value[0][0], pair.Value[0][1], pair.Value[0][2], pair.Value[0][3]
+										)
+								);
+								match(spec) {
+									| Ref(_, EnumMapping(name, _, members)) =>
+										foreach(pair in members)
+											sw.WriteLine(
+												"\t\t\t\t\t(\"{0}\", {1}.{2})" <- (pair.Value[1], name, pair.Key)
+											)
+									| StringMapping(_, mapping) =>
+										foreach(pair in mapping)
+											sw.WriteLine(
+												"\t\t\t\t\t(\"{0}\", \"{1}\")" <- (pair.Value, pair.Key)
+											)
+									| IntMapping(_, mapping) =>
+										foreach(pair in mapping)
+											sw.WriteLine(
+												"\t\t\t\t\t(\"{0}\", {1})" <- (pair.Value, pair.Key)
+											)
+									| _ => ()
+								}
+								sw.WriteLine("\t\t\t\t]))");
+								sw.WriteLine("\t\t\t}");
+								sw.WriteLine("\t\t}")
+						}
+					
+					sw.WriteLine("\t}")
+				
+				| _ => ()
+			}
+			
+			sw.WriteLine("}");
+			sw.Close();
+			fp.Close()
+		}
+		
+		public static Main(args : array [string]) : void {
+			_ = Compiler(args[0], args[1], args[2])
+		}
+	}
+}

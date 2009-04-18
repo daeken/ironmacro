@@ -41,9 +41,18 @@
 			<arg line="/32bit+ Obj/IronMacro.exe" />
 		</exec>
 	</target>
-	
-	<target name="Examples" description="Build the examples" depends="Core">
+
+	<target name="Compiler" description="Build the compiler" depends="Core">
+		<ncc target="exe" output="Obj/Imsc.exe" debug="${debug}">
+			<sources>
+				<include name="Compiler/*.n" />
+			</sources>
+			<references>
+				<include name="Obj/IronMacro.Core.dll" />
+			</references>
+			<arg line="-r Nemerle.Compiler.dll -r ../Nextem/Obj/Nextem.dll -m ../Nextem/Obj/Nextem.Macros.dll -r System.Drawing.dll" />
+		</ncc>
 	</target>
 	
-	<target name="Build" description="Build IronMacro" depends="Core, Gui, Examples" />
+	<target name="Build" description="Build IronMacro" depends="Core, Gui, Compiler" />
 </project>
