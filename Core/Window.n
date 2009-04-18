@@ -41,6 +41,7 @@ namespace IronMacro.Core {
 	
 	public class Window {
 		public Hwnd : IntPtr;
+		public mutable LastGrab : Bitmap;
 		
 		public Title : string {
 			get {
@@ -73,7 +74,8 @@ namespace IronMacro.Core {
 			def img = Image.FromHbitmap(bitmap);
 			_ = Gdi.DeleteObject(bitmap);
 			def rectf = RectangleF(0f, 0f, width :> float, height :> float);
-			img.Clone(rectf, PixelFormat.Format24bppRgb)
+			LastGrab = img.Clone(rectf, PixelFormat.Format24bppRgb);
+			LastGrab
 		}
 		
 		public static FindWindows(processName : string) : list [Window] {
