@@ -13,7 +13,7 @@ namespace IronMacro.Compiler {
 		this(spec : string, ns : string, outFn : string) {
 			def spec = Spec.Load(spec);
 			
-			def fp = File.Open(outFn, FileMode.Truncate);
+			def fp = File.Open(outFn, FileMode.Create);
 			def sw = StreamWriter(fp);
 			sw.WriteLine("using Nemerle.Collections;");
 			sw.WriteLine("using IronMacro.Core;");
